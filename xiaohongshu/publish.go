@@ -202,3 +202,236 @@ func findTextboxParent(elem *rod.Element) *rod.Element {
 	}
 	return nil
 }
+
+// NewPublishLongTextAction 创建长文发布Action
+func NewPublishLongTextAction(page *rod.Page) (*PublishAction, error) {
+	pp := page.Timeout(60 * time.Second)
+
+	pp.MustNavigate(urlOfPublic)
+	pp.MustElement(`div.upload-content`).MustWaitVisible()
+
+	// 等待页面加载
+	time.Sleep(1 * time.Second)
+
+	// 点击"写长文"选项卡
+	createElems := pp.MustElements("div.creator-tab")
+	for _, elem := range createElems {
+		text, err := elem.Text()
+		if err != nil {
+			continue
+		}
+		if text == "写长文" {
+			if err := elem.Click(proto.InputMouseButtonLeft, 1); err != nil {
+				continue
+			}
+			break
+		}
+	}
+
+	time.Sleep(2 * time.Second)
+
+	// 点击"新的创作"按钮
+	buttons := pp.MustElements("button")
+	var createButton *rod.Element
+	for _, btn := range buttons {
+		text, err := btn.Text()
+		if err != nil {
+			continue
+		}
+		if strings.Contains(text, "新的创作") {
+			createButton = btn
+			break
+		}
+	}
+
+	if createButton == nil {
+		return nil, errors.New("找不到新的创作按钮")
+	}
+
+	if err := createButton.Click(proto.InputMouseButtonLeft, 1); err != nil {
+		return nil, errors.Wrap(err, "点击新的创作按钮失败")
+	}
+
+	// 等待页面跳转
+	time.Sleep(2 * time.Second)
+
+	return &PublishAction{
+		page: pp,
+	}, nil
+}
+
+// PublishLongText 发布长文
+func (p *PublishAction) PublishLongText(ctx context.Context, content PublishLongTextContent) error {
+	if content.Title == "" || content.Content == "" {
+		return errors.New("标题和内容不能为空")
+	}
+
+	page := p.page.Context(ctx)
+
+	if err := submitLongTextPublish(page, content.Title, content.Content); err != nil {
+		return errors.Wrap(err, "小红书长文发布失败")
+	}
+
+	return nil
+}
+
+// submitLongTextPublish 提交长文发布
+func submitLongTextPublish(page *rod.Page, title, content string) error {
+	pp := page.Timeout(30 * time.Second)
+
+	// 填写标题
+	titleElem, err := findLongTextTitleElement(pp)
+	if err != nil {
+		return errors.Wrap(err, "找不到标题输入框")
+	}
+	
+	titleElem.MustClick()
+	time.Sleep(500 * time.Millisecond)
+	titleElem.MustSelectAllText()
+	titleElem.MustInput(title)
+	time.Sleep(1 * time.Second)
+
+	// 填写内容
+	contentElem, err := findLongTextContentElement(pp)
+	if err != nil {
+		return errors.Wrap(err, "找不到内容输入区域")
+	}
+	
+	contentElem.MustClick()
+	time.Sleep(500 * time.Millisecond)
+	contentElem.MustInput(content)
+	time.Sleep(1 * time.Second)
+
+	// 点击"一键排版"按钮
+	oneClickFormatButton, err := findOneClickFormatButton(pp)
+	if err != nil {
+		return errors.Wrap(err, "找不到一键排版按钮")
+	}
+	oneClickFormatButton.MustClick()
+	time.Sleep(2 * time.Second)
+
+	// 点击"下一步"按钮
+	nextStepButton, err := findNextStepButton(pp)
+	if err != nil {
+		return errors.Wrap(err, "找不到下一步按钮")
+	}
+	nextStepButton.MustClick()
+	time.Sleep(3 * time.Second)
+
+	// 等待发布按钮加载
+	time.Sleep(5 * time.Second)
+
+	// 点击发布按钮
+	publishButton, err := findPublishButton(pp)
+	if err != nil {
+		return errors.Wrap(err, "找不到发布按钮")
+	}
+	publishButton.MustClick()
+	time.Sleep(3 * time.Second)
+
+	return nil
+}
+
+// findLongTextTitleElement 查找长文标题输入框
+func findLongTextTitleElement(page *rod.Page) (*rod.Element, error) {
+	time.Sleep(1 * time.Second)
+
+	// 查找包含"输入标题"文本的元素
+	allElements := page.MustElements("*")
+	for _, elem := range allElements {
+		text, _ := elem.Text()
+		if strings.Contains(text, "输入标题") {
+			// 检查这个元素本身是否可编辑
+			contentEditable, _ := elem.Attribute("contenteditable")
+			if contentEditable != nil && *contentEditable == "true" {
+				return elem, nil
+			}
+
+			// 查找父元素中的可编辑元素
+			parent, err := elem.Parent()
+			if err == nil {
+				editableChildren := parent.MustElements("[contenteditable='true']")
+				if len(editableChildren) > 0 {
+					return editableChildren[0], nil
+				}
+			}
+		}
+	}
+
+	// 降级策略：使用第一个可编辑元素作为标题输入框
+	editableDivs := page.MustElements("div[contenteditable='true'], input[type='text'], textarea")
+	if len(editableDivs) > 0 {
+		return editableDivs[0], nil
+	}
+
+	return nil, errors.New("找不到标题输入框")
+}
+
+// findLongTextContentElement 查找长文内容输入区域
+func findLongTextContentElement(page *rod.Page) (*rod.Element, error) {
+	time.Sleep(1 * time.Second)
+
+	// 查找TipTap富文本编辑器
+	editableDivs := page.MustElements("div[contenteditable='true']")
+	for _, div := range editableDivs {
+		className, _ := div.Attribute("class")
+		if className != nil {
+			classStr := *className
+			if strings.Contains(classStr, "ProseMirror") || strings.Contains(classStr, "tiptap") {
+				return div, nil
+			}
+		}
+	}
+
+	// 降级策略：使用第一个可编辑元素
+	if len(editableDivs) > 0 {
+		return editableDivs[0], nil
+	}
+
+	return nil, errors.New("找不到内容输入区域")
+}
+
+// findOneClickFormatButton 查找一键排版按钮
+func findOneClickFormatButton(page *rod.Page) (*rod.Element, error) {
+	buttons := page.MustElements("button")
+	for _, btn := range buttons {
+		text, err := btn.Text()
+		if err != nil {
+			continue
+		}
+		if strings.Contains(text, "一键排版") {
+			return btn, nil
+		}
+	}
+	return nil, errors.New("找不到一键排版按钮")
+}
+
+// findNextStepButton 查找下一步按钮
+func findNextStepButton(page *rod.Page) (*rod.Element, error) {
+	buttons := page.MustElements("button")
+	for _, btn := range buttons {
+		text, err := btn.Text()
+		if err != nil {
+			continue
+		}
+		if strings.Contains(text, "下一步") {
+			return btn, nil
+		}
+	}
+	return nil, errors.New("找不到下一步按钮")
+}
+
+// findPublishButton 查找发布按钮
+func findPublishButton(page *rod.Page) (*rod.Element, error) {
+	buttons := page.MustElements("button")
+	for _, btn := range buttons {
+		text, err := btn.Text()
+		if err != nil {
+			continue
+		}
+		if text == "发布" || strings.Contains(text, "发布") {
+			return btn, nil
+		}
+	}
+	return nil, errors.New("找不到发布按钮")
+}

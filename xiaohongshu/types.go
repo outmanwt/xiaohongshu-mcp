@@ -136,3 +136,9 @@ type Comment struct {
 	SubComments     []Comment `json:"subComments"`
 	ShowTags        []string  `json:"showTags"`
 }
+
+// PublishLongTextContent 长文发布内容
+type PublishLongTextContent struct {
+	Title   string
+	Content string
+}
