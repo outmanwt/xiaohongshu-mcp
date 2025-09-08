@@ -24,6 +24,12 @@ type PublishRequest struct {
 	Images  []string `json:"images" binding:"required,min=1"`
 }
 
+// PublishLongTextRequest 长文发布请求
+type PublishLongTextRequest struct {
+	Title   string `json:"title" binding:"required"`
+	Content string `json:"content" binding:"required"`
+}
+
 // LoginStatusResponse 登录状态响应
 type LoginStatusResponse struct {
 	IsLoggedIn bool   `json:"is_logged_in"`
@@ -96,6 +102,46 @@ func (s *XiaohongshuService) PublishContent(ctx context.Context, req *PublishReq
 	}
 
 	return response, nil
+}
+
+// PublishLongText 发布长文
+func (s *XiaohongshuService) PublishLongText(ctx context.Context, req *PublishLongTextRequest) (*PublishResponse, error) {
+	// 构建长文发布内容
+	content := xiaohongshu.PublishLongTextContent{
+		Title:   req.Title,
+		Content: req.Content,
+	}
+
+	// 执行长文发布
+	if err := s.publishLongTextContent(ctx, content); err != nil {
+		return nil, err
+	}
+
+	response := &PublishResponse{
+		Title:   req.Title,
+		Content: req.Content,
+		Images:  0, // 长文无图片
+		Status:  "长文发布完成",
+	}
+
+	return response, nil
+}
+
+// publishLongTextContent 执行长文发布
+func (s *XiaohongshuService) publishLongTextContent(ctx context.Context, content xiaohongshu.PublishLongTextContent) error {
+	b := browser.NewBrowser(configs.IsHeadless())
+	defer b.Close()
+
+	page := b.NewPage()
+	defer page.Close()
+
+	action, err := xiaohongshu.NewPublishLongTextAction(page)
+	if err != nil {
+		return err
+	}
+
+	// 执行长文发布
+	return action.PublishLongText(ctx, content)
 }
 
 // processImages 处理图片列表，支持URL下载和本地路径

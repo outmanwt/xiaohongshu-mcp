@@ -1,11 +1,11 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
+    "context"
+    "encoding/json"
+    "fmt"
 
-	"github.com/sirupsen/logrus"
+    "github.com/sirupsen/logrus"
 )
 
 // MCP 工具处理函数
@@ -162,6 +162,43 @@ func (s *AppServer) handleSearchFeeds(ctx context.Context, args map[string]inter
 			Text: string(jsonData),
 		}},
 	}
+}
+
+// handlePublishLongText 处理长文发布
+func (s *AppServer) handlePublishLongText(ctx context.Context, args map[string]interface{}) *MCPToolResult {
+    logrus.Info("MCP: 发布长文")
+
+    // 解析参数
+    title, _ := args["title"].(string)
+    content, _ := args["content"].(string)
+
+    logrus.Infof("MCP: 发布长文 - 标题: %s", title)
+
+    // 构建长文发布请求
+    req := &PublishLongTextRequest{
+        Title:   title,
+        Content: content,
+    }
+
+    // 执行长文发布
+    result, err := s.xiaohongshuService.PublishLongText(ctx, req)
+    if err != nil {
+        return &MCPToolResult{
+            Content: []MCPContent{{
+                Type: "text",
+                Text: "长文发布失败: " + err.Error(),
+            }},
+            IsError: true,
+        }
+    }
+
+    resultText := fmt.Sprintf("长文发布成功: %+v", result)
+    return &MCPToolResult{
+        Content: []MCPContent{{
+            Type: "text",
+            Text: resultText,
+        }},
+    }
 }
 
 // handleGetFeedDetail 处理获取Feed详情

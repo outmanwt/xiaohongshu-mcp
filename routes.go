@@ -30,6 +30,7 @@ func setupRoutes(appServer *AppServer) *gin.Engine {
 	{
 		api.GET("/login/status", appServer.checkLoginStatusHandler)
 		api.POST("/publish", appServer.publishHandler)
+		api.POST("/publish-longtext", appServer.publishLongTextHandler)
 		api.GET("/feeds/list", appServer.listFeedsHandler)
 		api.GET("/feeds/search", appServer.searchFeedsHandler)
 		api.POST("/feeds/detail", appServer.getFeedDetailHandler)

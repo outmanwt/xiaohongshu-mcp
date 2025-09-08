@@ -68,6 +68,26 @@ func (s *AppServer) publishHandler(c *gin.Context) {
 	respondSuccess(c, result, "发布成功")
 }
 
+// publishLongTextHandler 发布长文
+func (s *AppServer) publishLongTextHandler(c *gin.Context) {
+	var req PublishLongTextRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_REQUEST",
+			"请求参数错误", err.Error())
+		return
+	}
+
+	// 执行长文发布
+	result, err := s.xiaohongshuService.PublishLongText(c.Request.Context(), &req)
+	if err != nil {
+		respondError(c, http.StatusInternalServerError, "PUBLISH_LONGTEXT_FAILED",
+			"长文发布失败", err.Error())
+		return
+	}
+
+	respondSuccess(c, result, "长文发布成功")
+}
+
 // listFeedsHandler 获取Feeds列表
 func (s *AppServer) listFeedsHandler(c *gin.Context) {
 	// 获取 Feeds 列表

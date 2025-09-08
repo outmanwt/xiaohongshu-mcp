@@ -194,6 +194,24 @@ func (s *AppServer) processToolsList(request *JSONRPCRequest) *JSONRPCResponse {
 			},
 		},
 		{
+			"name":        "publish_longtext",
+			"description": "发布长文到小红书",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"title": map[string]interface{}{
+						"type":        "string",
+						"description": "长文标题",
+					},
+					"content": map[string]interface{}{
+						"type":        "string",
+						"description": "长文内容",
+					},
+				},
+				"required": []string{"title", "content"},
+			},
+		},
+		{
 			"name":        "list_feeds",
 			"description": "获取用户发布的内容列表",
 			"inputSchema": map[string]interface{}{
@@ -269,6 +287,8 @@ func (s *AppServer) processToolCall(ctx context.Context, request *JSONRPCRequest
 		result = s.handleCheckLoginStatus(ctx)
 	case "publish_content":
 		result = s.handlePublishContent(ctx, toolArgs)
+	case "publish_longtext":
+		result = s.handlePublishLongText(ctx, toolArgs)
 	case "list_feeds":
 		result = s.handleListFeeds(ctx)
 	case "search_feeds":
