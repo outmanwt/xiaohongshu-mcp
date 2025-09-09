@@ -241,44 +241,18 @@ func executeDetailedPublishFlow(t *testing.T, action *PublishAction, title, cont
 
 	// 步骤10: 设置可见范围为仅自己可见
 	slog.Info("执行步骤10: 设置可见范围")
-	visibilitySelector, err := findVisibilitySelector(page)
+	err = setVisibilityToPrivate(page)
 	if err != nil {
 		results = append(results, TestResult{
-			Step: 10, Name: "查找可见范围选择器", Success: false,
-			Error: err.Error(), Details: "findVisibilitySelector() 执行失败",
+			Step: 10, Name: "设置可见范围为仅自己可见", Success: false,
+			Error: err.Error(), Details: "setVisibilityToPrivate() 执行失败",
 		})
 	} else {
 		results = append(results, TestResult{
-			Step: 10, Name: "查找可见范围选择器", Success: true,
-			Details: "✅ findVisibilitySelector() 找到可见范围选择器",
+			Step: 10, Name: "设置可见范围为仅自己可见", Success: true,
+			Details: "✅ 可见范围设置完成（包含所有重试逻辑）",
 		})
-
-		// 点击选择器
-		visibilitySelector.MustClick()
-		time.Sleep(1 * time.Second)
-
-		// 查找私密选项
-		privateOption, err := findPrivateVisibilityOption(page)
-		if err != nil {
-			results = append(results, TestResult{
-				Step: 10, Name: "查找仅自己可见选项", Success: false,
-				Error: err.Error(), Details: "findPrivateVisibilityOption() 执行失败",
-			})
-		} else {
-			results = append(results, TestResult{
-				Step: 10, Name: "查找仅自己可见选项", Success: true,
-				Details: "✅ findPrivateVisibilityOption() 找到仅自己可见选项",
-			})
-
-			privateOption.MustClick()
-			time.Sleep(1 * time.Second)
-
-			results = append(results, TestResult{
-				Step: 10, Name: "设置可见范围为仅自己可见", Success: true,
-				Details: "✅ 可见范围设置为仅自己可见成功",
-			})
-			fmt.Println("✅ 步骤10: 可见范围设置为仅自己可见成功")
-		}
+		fmt.Println("✅ 步骤10: 可见范围设置完成")
 	}
 
 	fmt.Println("\n【第三阶段：发布完成测试】")
@@ -296,17 +270,17 @@ func executeDetailedPublishFlow(t *testing.T, action *PublishAction, title, cont
 			Step: 11, Name: "查找发布按钮", Success: true,
 			Details: "✅ findPublishButton() 找到发布按钮",
 		})
-
+	
 		publishButton.MustClick()
 		time.Sleep(3 * time.Second)
-
+	
 		results = append(results, TestResult{
 			Step: 11, Name: "点击发布按钮", Success: true,
 			Details: "✅ 发布按钮点击成功，长文发布完成",
 		})
 		fmt.Println("✅ 步骤11: 发布按钮找到并发布成功")
 	}
-
+	
 	return results
 }
 

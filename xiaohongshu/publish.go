@@ -1,15 +1,14 @@
 package xiaohongshu
 
 import (
-	"context"
-	"log/slog"
-	"strings"
-	"time"
-    "os"
+    "context"
+    "log/slog"
+    "strings"
+    "time"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
-	"github.com/pkg/errors"
+    "github.com/pkg/errors"
 )
 
 // PublishImageContent 发布图文内容
@@ -377,9 +376,9 @@ func setVisibilityToPrivate(page *rod.Page) error {
 	// 等待页面完全加载
 	time.Sleep(1 * time.Second)
 
-	// 滚动到页面底部，确保设置区域可见
-	time.Sleep(1 * time.Second)
-
+    // 滚动到页面底部，确保设置区域可见
+    page.MustEval("() => window.scrollTo(0, document.body.scrollHeight)")
+    time.Sleep(1 * time.Second)
 
 	// 查找可见范围选择器
 	visibilitySelector, err := findVisibilitySelector(page)
@@ -387,10 +386,11 @@ func setVisibilityToPrivate(page *rod.Page) error {
 		return errors.Wrap(err, "找不到可见范围选择器")
 	}
 
-	// 点击选择器展开下拉菜单
-	visibilitySelector.MustScrollIntoView()
-	visibilitySelector.MustClick()
-	time.Sleep(500 * time.Millisecond) // 等待下拉菜单展开
+    // 点击选择器展开下拉菜单
+    visibilitySelector.MustScrollIntoView()
+    visibilitySelector.MustClick()
+    // 等待弹层出现（如果存在下拉/弹层）
+    page.Timeout(3 * time.Second).Element("div.d-popover.d-dropdown, [role='listbox'], div[class*='popover'][class*='dropdown']")
 
 	// 查找并点击"仅自己可见"选项
 	privateOption, err := findPrivateVisibilityOption(page)
@@ -398,8 +398,12 @@ func setVisibilityToPrivate(page *rod.Page) error {
 		return errors.Wrap(err, "找不到仅自己可见选项")
 	}
 
-	privateOption.MustClick()
-	return nil
+    privateOption.MustClick()
+    if _, err := page.Timeout(4 * time.Second).
+        ElementR("div.d-select-content, div.d-text, div.d-select, div.d-select-wrapper", "仅自己可见|仅自己|仅我可见|私密"); err != nil {
+        return errors.Wrap(err, "可见范围未切换到仅自己")
+    }
+    return nil
 }
 
 // findLongTextTitleElement 查找长文标题输入框
@@ -584,47 +588,92 @@ func findConfirmationContentElement(page *rod.Page) (*rod.Element, error) {
 }
 
 func findVisibilitySelector(page *rod.Page) (*rod.Element, error) {
-    // 滚动到底部确保设置区域可见
-    page.Mouse.Scroll(0.0, 10000.0, 1) // 正确的参数类型
+    // 保证设置区域可见：滚动页面与常见内嵌容器到底部
+    page.MustEval("() => window.scrollTo(0, document.body.scrollHeight)")
+    page.MustWaitIdle()
+    // 同时尝试把内嵌可滚动容器拉到底（如 microapp 容器）
+    page.MustEval("() => { const el = document.querySelector('.microapp-container, #creator-publish-dom, .p-container'); if (el) { el.scrollTop = el.scrollHeight } }")
     page.MustWaitIdle()
 
-    el, err := page.Timeout(5 * time.Second).ElementR("div,span", "可见范围|公开可见|谁可以看")
-    if err != nil || el == nil {
-        slog.Error("找不到可见范围选择器", "err", err)
-        return nil, errors.New("找不到可见范围选择器")
+    // 试探性滚动后，直接尝试命中触发器
+
+    // 直接寻找可交互的“可见范围/谁可以看/公开可见”控件
+    if ctl, err := page.Timeout(3 * time.Second).
+        ElementR("button,[role='button'],div[role='combobox'],input[role='combobox']", "可见范围|公开可见|谁可以看|谁可见"); err == nil {
+        ctl.MustScrollIntoView()
+        return ctl, nil
+    }
+    // 针对 d-select 组件：匹配当前值为“公开可见/仅自己可见”等的选择器，并提升到可点击容器
+    if val, err := page.Timeout(3 * time.Second).
+        ElementR("div.d-select-content, div.d-text, div.d-select, div.d-select-wrapper, div.d-grid.d-select-main", "公开可见|仅自己可见|仅自己|谁可以看|谁可见"); err == nil {
+        cur := val
+        for i := 0; i < 5; i++ {
+            if host, err := cur.Element("div.d-select, div.d-select-wrapper, div.d-grid.d-select-main"); err == nil {
+                host.MustScrollIntoView()
+                return host, nil
+            }
+            if p, err := cur.Parent(); err == nil {
+                cur = p
+            } else {
+                break
+            }
+        }
+        val.MustScrollIntoView()
+        return val, nil
     }
 
-    el.MustScrollIntoView()
-    txt, _ := el.Text()
-    slog.Info("找到的可见范围元素内容", "text", txt)
-    return el, nil
+    // 兜底：命中文案标签后向上寻找触发器
+    candidates := page.MustElements("div,span,label")
+    for _, c := range candidates {
+        t, _ := c.Text()
+        if !(strings.Contains(t, "可见范围") || strings.Contains(t, "公开可见") || strings.Contains(t, "谁可以看") || strings.Contains(t, "谁可见")) {
+            continue
+        }
+        cur := c
+        for i := 0; i < 5; i++ {
+            if trigger, err := cur.ElementR("button,[role='button'],[aria-haspopup='listbox'],div[role='combobox'],input[role='combobox']", "可见范围|公开|仅自己|谁可以看|谁可见"); err == nil {
+                return trigger, nil
+            }
+            if p, err := cur.Parent(); err == nil {
+                cur = p
+            } else {
+                break
+            }
+        }
+    }
+    return nil, errors.New("找不到可见范围选择器")
 }
 
 // findPrivateVisibilityOption 查找"仅自己可见"选项
 func findPrivateVisibilityOption(page *rod.Page) (*rod.Element, error) {
-	// 基于DOM结构：下拉菜单展开后，查找包含"仅自己可见"的选项
-	// 等待下拉菜单完全展开
-	time.Sleep(500 * time.Millisecond)
+    // 等待下拉/弹层完全展开
+    page.MustWaitIdle()
+    time.Sleep(200 * time.Millisecond)
 
+    // 兼容多种文案
+    pattern := "仅自己可见|仅自己|仅我可见|私密"
 
-	// 精确匹配"仅自己可见"文本
-	textElements := page.MustElements("div, span")
-	for _, elem := range textElements {
-		text, _ := elem.Text()
-		// 精确匹配，根据DOM结构应该是generic [ref=e742]: "仅自己可见"
-		if text == "仅自己可见" {
-			return elem, nil
-		}
-	}
+    // 优先在下拉/弹层容器内查找真实选项节点（限制为可点击项，避免匹配容器）
+    if overlay, err := page.Timeout(3 * time.Second).
+        Element("div.d-popover.d-dropdown, [role='listbox'], div[class*='popover'][class*='dropdown']"); err == nil {
+        if item, err := overlay.ElementR("li,[role='option'],.d-dropdown-item,.ant-select-item-option,button,a,[aria-selected],div.d-grid-item,div.name,div.custom-option", pattern); err == nil {
+            return item, nil
+        }
+        // 回退：遍历候选并按文本匹配
+        opts := overlay.MustElements("li,[role='option'],.d-dropdown-item,.ant-select-item-option,button,a,[aria-selected],div.d-grid-item,div.name,div.custom-option")
+        for _, o := range opts {
+            t, _ := o.Text()
+            if strings.Contains(t, "仅自己可见") || strings.Contains(t, "仅自己") || strings.Contains(t, "仅我可见") || strings.Contains(t, "私密") {
+                return o, nil
+            }
+        }
+    }
 
-	// 备选策略：包含匹配
-	for _, elem := range textElements {
-		text, _ := elem.Text()
-		if strings.Contains(text, "仅自己可见") {
-			return elem, nil
-		}
-	}
+    // 回退：全局查找典型可点击选项节点
+    if el, err := page.Timeout(5 * time.Second).
+        ElementR("li,[role='option'],.d-dropdown-item,.ant-select-item-option,button,a,[aria-selected],div.d-grid-item,div.name,div.custom-option", pattern); err == nil {
+        return el, nil
+    }
 
-	return nil, errors.New("找不到仅自己可见选项")
+    return nil, errors.New("找不到仅自己可见选项")
 }
-
